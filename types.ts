@@ -81,6 +81,7 @@ export interface DialogueLine {
   speaker: string;
   text: string;
   side: 'left' | 'right';
+  portrait?: string;
 }
 
 export interface StoryChapter {
