@@ -1,10 +1,9 @@
 
 export type GameStatus = 'MENU' | 'STORY' | 'CUSTOMIZE' | 'BATTLE' | 'RESULT' | 'TUTORIAL';
 export type ArenaStyle = 'CLASSIC' | 'CYBER_HEX' | 'MAGMA_OCTA';
-export type AIDifficulty = 'ROOKIE' | 'ACE' | 'ZENON';
-export type BladeArchetype = 'STRIKER' | 'GUARDIAN' | 'SPEEDSTER' | 'PHANTOM';
+export type AIDifficulty = 'ROOKIE' | 'ACE' | 'ZENON' | 'GOD_TIER';
 
-export type BitbeastType = 'DRAGOON' | 'DRANZER' | 'DRACIEL' | 'DRIGER';
+export type BeyName = 'Z_ACHILLES' | 'WINNING_VALKYRIE' | 'DEAD_PHOENIX' | 'BLOODY_LONGINUS' | 'EMPEROR_FORNEUS';
 
 export interface Point {
   x: number;
@@ -20,9 +19,8 @@ export interface Particle {
   maxLife: number;
   color: string;
   size: number;
-  // Added symbol property to Particle interface
   symbol?: string;
-  type?: 'IMPACT' | 'STORM' | 'FLASH' | 'EMBER' | 'SPARK' | 'TRAIL' | 'BEAST';
+  type?: 'IMPACT' | 'STORM' | 'FLASH' | 'EMBER' | 'SPARK' | 'TRAIL' | 'BEAST' | 'TURBO' | 'PIECE';
   angle?: number;
 }
 
@@ -30,12 +28,12 @@ export interface ReplayFrame {
   px: number;
   py: number;
   pr: number;
+  pSpecial: boolean;
+  pHealth: number;
   rx: number;
   ry: number;
   rr: number;
-  pSpecial: boolean;
   rSpecial: boolean;
-  pHealth: number;
   rHealth: number;
 }
 
@@ -45,12 +43,22 @@ export interface BattleStats {
   collisions: number;
   specialsUsed: number;
   maxSpeed: number;
+  isBurst: boolean;
   replayData?: ReplayFrame[];
+}
+
+export interface BeyStats {
+  attack: number;
+  defense: number;
+  stamina: number;
+  burstResistance: number;
+  weight: number;
 }
 
 export interface Blade {
   id: string;
   name: string;
+  type: BeyName;
   x: number;
   y: number;
   vx: number;
@@ -65,15 +73,21 @@ export interface Blade {
   color: string;
   glowColor: string;
   isPlayer: boolean;
-  archetype: BladeArchetype;
-  bitbeast: BitbeastType;
-  stylePattern?: 'DRAGON' | 'PHOENIX' | 'TIGER' | 'TURTLE';
+  isTurbo: boolean;
+  stats: BeyStats;
 }
 
-export interface GameState {
-  status: GameStatus;
-  player: Blade;
-  rival: Blade;
-  winnerId: string | null;
-  round: number;
+export interface DialogueLine {
+  speaker: string;
+  text: string;
+  side: 'left' | 'right';
+}
+
+export interface StoryChapter {
+  id: number;
+  title: string;
+  rivalName: string;
+  rivalBey: BeyName;
+  dialogue: DialogueLine[];
+  arena: ArenaStyle;
 }

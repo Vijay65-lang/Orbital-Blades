@@ -1,125 +1,89 @@
 
-import { ArenaStyle, BladeArchetype, BitbeastType } from './types';
+import { ArenaStyle, BeyName, BeyStats, StoryChapter } from './types';
 
-export const ARENA_RADIUS = 300;
-export const BLADE_RADIUS = 32; // Optimized for detail
-export const FRICTION = 0.992; 
+export const ARENA_RADIUS = 350;
+export const BLADE_RADIUS = 38; 
+export const FRICTION = 0.995; 
 export const WALL_BOUNCE = 0.75;
 export const COLLISION_ELASTICITY = 0.98;
-export const DAMAGE_FACTOR = 0.15;
-export const ENERGY_GAIN = 0.25;
+export const ENERGY_GAIN = 0.6;
 
-export interface ArchetypeProperties {
-  mass: number;
-  speedMult: number;
-  recoilMult: number;
-  damageMult: number;
-  energyMult: number;
-  shapeSides: number;
-  description: string;
-}
-
-export const ARCHETYPE_STATS: Record<BladeArchetype, ArchetypeProperties> = {
-  STRIKER: {
-    mass: 0.85,
-    speedMult: 1.4,
-    recoilMult: 1.6,
-    damageMult: 1.8,
-    energyMult: 1.3,
-    shapeSides: 3,
-    description: "Attack: Sharp edges designed for maximum impact force."
+export const BEY_DATA: Record<BeyName, { stats: BeyStats, color: string, glow: string, move: string, symbol: string, secondary: string }> = {
+  Z_ACHILLES: {
+    stats: { attack: 9, defense: 7, stamina: 6, burstResistance: 7, weight: 1.3 },
+    color: '#ef4444', glow: '#fca5a5', secondary: '#94a3b8', move: 'Z-Buster', symbol: '⚔️'
   },
-  GUARDIAN: {
-    mass: 2.0,
-    speedMult: 0.5,
-    recoilMult: 0.2,
-    damageMult: 0.6,
-    energyMult: 0.7,
-    shapeSides: 8,
-    description: "Defense: High-density weight disk for ironclad stability."
+  WINNING_VALKYRIE: {
+    stats: { attack: 10, defense: 5, stamina: 4, burstResistance: 6, weight: 1.1 },
+    color: '#2563eb', glow: '#60a5fa', secondary: '#f59e0b', move: 'Rush Shoot', symbol: '🦅'
   },
-  SPEEDSTER: {
-    mass: 0.7,
-    speedMult: 1.7,
-    recoilMult: 1.1,
-    damageMult: 0.8,
-    energyMult: 1.5,
-    shapeSides: 5,
-    description: "Endurance: Low-friction bearings for infinite spin time."
+  DEAD_PHOENIX: {
+    stats: { attack: 7, defense: 10, stamina: 9, burstResistance: 10, weight: 1.6 },
+    color: '#991b1b', glow: '#f87171', secondary: '#ca8a04', move: 'Dead Stinger', symbol: '🔥'
   },
-  PHANTOM: {
-    mass: 1.2,
-    speedMult: 1.0,
-    recoilMult: 1.0,
-    damageMult: 1.3,
-    energyMult: 1.1,
-    shapeSides: 0,
-    description: "Balance: Adapts to any battle condition effortlessly."
+  BLOODY_LONGINUS: {
+    stats: { attack: 11, defense: 4, stamina: 3, burstResistance: 5, weight: 1.4 },
+    color: '#f8fafc', glow: '#cbd5e1', secondary: '#3b82f6', move: 'Nightmare Boost', symbol: '🐉'
+  },
+  EMPEROR_FORNEUS: {
+    stats: { attack: 6, defense: 9, stamina: 7, burstResistance: 9, weight: 1.5 },
+    color: '#ea580c', glow: '#fb923c', secondary: '#059669', move: 'Emperor Guard', symbol: '🦈'
   }
 };
 
-export const COLOR_PRESETS = [
-  { name: 'Saphire', color: '#3b82f6', glow: '#60a5fa' },
-  { name: 'Ruby', color: '#ef4444', glow: '#f87171' },
-  { name: 'Emerald', color: '#10b981', glow: '#34d399' },
-  { name: 'Amber', color: '#f59e0b', glow: '#fbbf24' },
-  { name: 'Amethyst', color: '#8b5cf6', glow: '#a78bfa' },
-  { name: 'Obsidian', color: '#1e293b', glow: '#64748b' }
+export const STORY_CHAPTERS: StoryChapter[] = [
+  { 
+    id: 1, 
+    title: "A New Rivalry", 
+    rivalName: "Kenji", 
+    rivalBey: "EMPEROR_FORNEUS",
+    dialogue: [
+      { speaker: "Kenji", text: "Hey Aiger! I've been training for the Zenon Tournament too!", side: "right" },
+      { speaker: "Aiger", text: "Kenji? I won't lose to anyone! Achilles is ready!", side: "left" },
+      { speaker: "Kenji", text: "We'll see about that. My Forneus is an iron wall!", side: "right" }
+    ],
+    arena: 'CLASSIC'
+  },
+  { 
+    id: 2, 
+    title: "The Frozen Dragon", 
+    rivalName: "Lui Shirosagi", 
+    rivalBey: "BLOODY_LONGINUS",
+    dialogue: [
+      { speaker: "Lui", text: "So you're the one they call the Turbo Blader?", side: "right" },
+      { speaker: "Aiger", text: "Lui Shirosagi! I've been waiting for this match!", side: "left" },
+      { speaker: "Lui", text: "Don't make me laugh. Longinus will tear you apart!", side: "right" }
+    ],
+    arena: 'CYBER_HEX'
+  },
+  { 
+    id: 3, 
+    title: "Resonance Test", 
+    rivalName: "Valt Aoi", 
+    rivalBey: "WINNING_VALKYRIE",
+    dialogue: [
+      { speaker: "Valt", text: "Whoa, Aiger! Your spirit is burning bright today!", side: "right" },
+      { speaker: "Aiger", text: "Valt! Watch me take Achilles to the top!", side: "left" },
+      { speaker: "Valt", text: "Let's go then! Go Shoot!", side: "right" }
+    ],
+    arena: 'CLASSIC'
+  },
+  { 
+    id: 4, 
+    title: "Shadow of the Emperor", 
+    rivalName: "Lord Vex", 
+    rivalBey: "DEAD_PHOENIX",
+    dialogue: [
+      { speaker: "Lord Vex", text: "I am the darkness that consumes all light...", side: "right" },
+      { speaker: "Aiger", text: "Lord Vex! I won't let your Dead Phoenix destroy this tournament!", side: "left" },
+      { speaker: "Lord Vex", text: "Destruction is the ultimate form of resonance. Witness your end!", side: "right" }
+    ],
+    arena: 'MAGMA_OCTA'
+  }
 ];
 
-export const STYLE_PATTERNS = ['DRAGON', 'PHOENIX', 'TIGER', 'TURTLE'] as const;
-
-export interface BitbeastData {
-  name: string;
-  move: string;
-  color: string;
-  symbol: string;
-  effect: 'TORNADO' | 'FLAME' | 'SHIELD' | 'SLASH';
-}
-
-export const BITBEAST_INFO: Record<BitbeastType, BitbeastData> = {
-  DRAGOON: { name: 'Storm Dragoon', move: 'Galaxy Storm', color: '#60a5fa', symbol: '🐉', effect: 'TORNADO' },
-  DRANZER: { name: 'Flame Dranzer', move: 'Spiral Flare', color: '#fb7185', symbol: '🦅', effect: 'FLAME' },
-  DRACIEL: { name: 'Fortress Draciel', move: 'Great Shield', color: '#4ade80', symbol: '🐢', effect: 'SHIELD' },
-  DRIGER: { name: 'White Tiger Driger', move: 'Lightning Slash', color: '#facc15', symbol: '🐯', effect: 'SLASH' }
-};
-
-export interface ArenaTheme {
-  id: ArenaStyle;
-  name: string;
-  sides: number;
-  floorColor: string;
-  borderColor: string;
-  gridColor: string;
-  accentColor: string;
-}
-
-export const ARENA_THEMES: Record<ArenaStyle, ArenaTheme> = {
-  CLASSIC: {
-    id: 'CLASSIC',
-    name: 'BEY-STADIUM: ALPHA',
-    sides: 0,
-    floorColor: '#0f172a',
-    borderColor: '#334155',
-    gridColor: 'rgba(51, 65, 85, 0.4)',
-    accentColor: '#3b82f6'
-  },
-  CYBER_HEX: {
-    id: 'CYBER_HEX',
-    name: 'NEON GRID OMEGA',
-    sides: 6,
-    floorColor: '#020617',
-    borderColor: '#06b6d4',
-    gridColor: 'rgba(6, 182, 212, 0.1)',
-    accentColor: '#22d3ee'
-  },
-  MAGMA_OCTA: {
-    id: 'MAGMA_OCTA',
-    name: 'INFERNO CORE',
-    sides: 8,
-    floorColor: '#1c0a0a',
-    borderColor: '#991b1b',
-    gridColor: 'rgba(153, 27, 27, 0.1)',
-    accentColor: '#ef4444'
-  }
+export const ARENA_THEMES = {
+  CLASSIC: { name: 'BEY-STADIUM: ALPHA', floor: '#0f172a', border: '#334155', accent: '#3b82f6' },
+  CYBER_HEX: { name: 'BEY-STADIUM: NEON GRID', floor: '#020617', border: '#06b6d4', accent: '#22d3ee' },
+  MAGMA_OCTA: { name: 'BEY-STADIUM: INFERNO CORE', floor: '#1c0a0a', border: '#991b1b', accent: '#ef4444' }
 };

@@ -1,11 +1,8 @@
 
 import { Blade, Point, ArenaStyle } from '../types';
-import { ARENA_RADIUS, WALL_BOUNCE, COLLISION_ELASTICITY, FRICTION, ARENA_THEMES, ARCHETYPE_STATS } from '../constants';
+import { ARENA_RADIUS, WALL_BOUNCE, COLLISION_ELASTICITY, FRICTION, BEY_DATA } from '../constants';
 
-/**
- * Calculates mass-based circle collision and updates velocities
- */
-export const resolveCollision = (b1: Blade, b2: Blade): boolean => {
+export const resolveCollision = (b1: Blade, b2: Blade): { collided: boolean, burst: boolean } => {
   const dx = b2.x - b1.x;
   const dy = b2.y - b1.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
@@ -14,17 +11,14 @@ export const resolveCollision = (b1: Blade, b2: Blade): boolean => {
   if (distance < minDistance) {
     const nx = dx / distance;
     const ny = dy / distance;
-    
-    // Relative velocity
     const rvx = b2.vx - b1.vx;
     const rvy = b2.vy - b1.vy;
     const velAlongNormal = rvx * nx + rvy * ny;
 
-    // Do not resolve if velocities are separating
-    if (velAlongNormal > 0) return true;
+    if (velAlongNormal > 0) return { collided: true, burst: false };
 
-    const m1 = ARCHETYPE_STATS[b1.archetype].mass;
-    const m2 = ARCHETYPE_STATS[b2.archetype].mass;
+    const m1 = b1.stats.weight * (b1.isTurbo ? 1.3 : 1.0);
+    const m2 = b2.stats.weight * (b2.isTurbo ? 1.3 : 1.0);
     
     const e = COLLISION_ELASTICITY;
     const j = -(1 + e) * velAlongNormal;
@@ -33,83 +27,69 @@ export const resolveCollision = (b1: Blade, b2: Blade): boolean => {
     const impulseX = impulse * nx;
     const impulseY = impulse * ny;
 
-    b1.vx -= impulseX / m1;
-    b1.vy -= impulseY / m1;
-    b2.vx += impulseX / m2;
-    b2.vy += impulseY / m2;
+    b1.vx -= (impulseX / m1);
+    b1.vy -= (impulseY / m1);
+    b2.vx += (impulseX / m2);
+    b2.vy += (impulseY / m2);
 
-    // Positional correction to prevent sticking
-    const percent = 0.4; // constant for positional correction
-    const slop = 0.01; // constant for positional correction
-    const overlap = Math.max(0, minDistance - distance - slop);
-    const correction = (overlap / (1 / m1 + 1 / m2)) * percent;
-    const cx = correction * nx;
-    const cy = correction * ny;
+    const impactForce = Math.abs(impulse);
+    let burstOccurred = false;
+    
+    const b1Damage = impactForce * (1.8 / b1.stats.burstResistance);
+    const b2Damage = impactForce * (1.8 / b2.stats.burstResistance);
 
-    b1.x -= cx / m1;
-    b1.y -= cy / m1;
-    b2.x += cx / m2;
-    b2.y += cy / m2;
+    b1.health -= b1Damage;
+    b2.health -= b2Damage;
 
-    return true;
+    if (b1.health <= 0 || b2.health <= 0) burstOccurred = true;
+
+    const overlap = minDistance - distance;
+    const correction = (overlap / (1 / m1 + 1 / m2)) * 0.5;
+    b1.x -= (correction * nx) / m1;
+    b1.y -= (correction * ny) / m1;
+    b2.x += (correction * nx) / m2;
+    b2.y += (correction * ny) / m2;
+
+    return { collided: true, burst: burstOccurred };
   }
-  return false;
-};
-
-/**
- * Handles boundary collisions with different arena shapes
- */
-export const resolveArenaBoundary = (blade: Blade, center: Point, style: ArenaStyle) => {
-  const theme = ARENA_THEMES[style];
-  const dx = blade.x - center.x;
-  const dy = blade.y - center.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-
-  if (theme.sides === 0) {
-    if (dist + blade.radius > ARENA_RADIUS) {
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const dot = blade.vx * nx + blade.vy * ny;
-      if (dot > 0) {
-        blade.vx -= 2 * dot * nx * WALL_BOUNCE;
-        blade.vy -= 2 * dot * ny * WALL_BOUNCE;
-      }
-      const overlap = dist + blade.radius - ARENA_RADIUS;
-      blade.x -= nx * overlap;
-      blade.y -= ny * overlap;
-    }
-  } else {
-    const angle = Math.atan2(dy, dx);
-    const n = theme.sides;
-    const r_in = ARENA_RADIUS * Math.cos(Math.PI / n);
-    const current_limit = r_in / Math.cos(((angle + Math.PI / n) % (2 * Math.PI / n)) - Math.PI / n);
-
-    if (dist + blade.radius > current_limit) {
-      const sideIndex = Math.floor(((angle + Math.PI / n) + Math.PI * 2) / (Math.PI * 2 / n)) % n;
-      const normalAngle = sideIndex * (Math.PI * 2 / n);
-      const nx = Math.cos(normalAngle);
-      const ny = Math.sin(normalAngle);
-
-      const dot = blade.vx * nx + blade.vy * ny;
-      if (dot > 0) {
-        blade.vx -= 2 * dot * nx * WALL_BOUNCE;
-        blade.vy -= 2 * dot * ny * WALL_BOUNCE;
-      }
-      const overlap = dist + blade.radius - current_limit;
-      blade.x -= nx * overlap;
-      blade.y -= ny * overlap;
-    }
-  }
+  return { collided: false, burst: false };
 };
 
 export const updatePhysics = (blade: Blade) => {
-  const stats = ARCHETYPE_STATS[blade.archetype];
   blade.vx *= FRICTION;
   blade.vy *= FRICTION;
   blade.x += blade.vx;
   blade.y += blade.vy;
+  
   const speed = Math.sqrt(blade.vx * blade.vx + blade.vy * blade.vy);
-  // Rotation speed tied to current movement velocity
-  blade.rotationSpeed = Math.min(0.5, 0.08 + speed * 0.03);
+  blade.rotationSpeed = 0.15 + (speed * 0.12);
   blade.rotation += blade.rotationSpeed;
+
+  if (blade.health < 40 && !blade.isTurbo) {
+    blade.isTurbo = true;
+  }
+};
+
+export const resolveArenaBoundary = (blade: Blade, style: ArenaStyle, framesElapsed: number) => {
+    const dx = blade.x;
+    const dy = blade.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist + blade.radius > ARENA_RADIUS) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const dot = blade.vx * nx + blade.vy * ny;
+        if (dot > 0) {
+            blade.vx -= 2 * dot * nx * WALL_BOUNCE;
+            blade.vy -= 2 * dot * ny * WALL_BOUNCE;
+            
+            // Only apply wall damage after the launch phase (1 second) to prevent instant bursting
+            if (framesElapsed > 60) {
+              blade.health -= 0.08; 
+            }
+        }
+        const overlap = dist + blade.radius - ARENA_RADIUS;
+        blade.x -= nx * overlap;
+        blade.y -= ny * overlap;
+    }
 };

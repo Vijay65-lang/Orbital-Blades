@@ -47,31 +47,32 @@ class SoundManager {
     this.init();
     this.isBgmPlaying = true;
     
-    const bpm = 140;
-    const stepTime = 60 / bpm / 2; // 1/8th notes
+    const bpm = 160; // Faster tempo for Turbo
+    const stepTime = 60 / bpm / 2; 
 
-    const bassSeq = [55, 55, 65, 55, 55, 55, 65, 73]; 
-    const leadSeq = [220, 0, 247, 0, 261, 293, 261, 0];
+    // Aggressive synth-wave style bassline
+    const bassSeq = [50, 50, 60, 50, 70, 50, 60, 40]; 
+    const leadSeq = [200, 300, 250, 400, 0, 350, 200, 600];
 
     this.bgmInterval = window.setInterval(() => {
       if (!this.ctx) return;
       
+      // Kick drum
       if (this.bgmStep % 4 === 0) {
-        this.playTone(60, 'sine', 0.2, 0.05);
+        this.playTone(55, 'sine', 0.25, 0.1);
       }
       
+      // Snare
       if (this.bgmStep % 8 === 4) {
-        this.playTone(200, 'square', 0.05, 0.01, false);
+        this.playTone(220, 'square', 0.1, 0.02, true);
       }
 
       const bFreq = bassSeq[this.bgmStep % bassSeq.length];
-      if (bFreq > 0) {
-        this.playTone(bFreq, 'sawtooth', 0.15, 0.02);
-      }
+      this.playTone(bFreq, 'sawtooth', 0.1, 0.04);
 
-      const lFreq = leadSeq[this.bgmStep % leadSeq.length];
-      if (lFreq > 0 && Math.random() > 0.4) {
-        this.playTone(lFreq, 'square', 0.1, 0.005);
+      if (Math.random() > 0.7) {
+        const lFreq = leadSeq[this.bgmStep % leadSeq.length];
+        if (lFreq > 0) this.playTone(lFreq, 'square', 0.15, 0.015);
       }
 
       this.bgmStep++;
@@ -89,54 +90,37 @@ class SoundManager {
   playLaunch() {
     this.init();
     if (!this.ctx) return;
-    this.vibrate(20);
+    this.vibrate(50);
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.2);
-    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.3);
+    osc.frequency.setValueAtTime(80, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.25);
+    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.35);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    osc.stop(this.ctx.currentTime + 0.35);
   }
 
   playImpact(intensity: number) {
-    const vol = Math.min(0.3, intensity * 0.05);
-    if (intensity > 15) {
-      this.vibrate([30, 20, 30]);
-      this.playTone(100, 'square', 0.2, vol);
-      this.playTone(40, 'sine', 0.3, vol);
-    } else {
-      this.vibrate(10);
-      this.playTone(250 + Math.random() * 100, 'square', 0.1, vol * 0.5);
-    }
-  }
-
-  playEnergyGain() {
-    this.playTone(880, 'sine', 0.05, 0.02);
-  }
-
-  playEnergyMax() {
-    this.vibrate([100, 50, 100]);
-    this.playTone(440, 'square', 0.1, 0.05);
-    this.playTone(660, 'square', 0.1, 0.05);
-    this.playTone(880, 'square', 0.2, 0.05);
+    const vol = Math.min(0.4, intensity * 0.06);
+    this.vibrate(intensity * 2);
+    this.playTone(80 + Math.random() * 40, 'square', 0.2, vol);
   }
 
   playSpecial() {
     this.init();
     if (!this.ctx) return;
-    this.vibrate([50, 50, 100, 50, 150]);
-    const duration = 1.0;
+    this.vibrate([100, 50, 100, 50, 200]);
+    const duration = 1.2;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(400, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + duration);
-    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + duration);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
     gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -144,19 +128,10 @@ class SoundManager {
     osc.stop(this.ctx.currentTime + duration);
   }
 
-  playWin() {
-    this.vibrate([200, 100, 200, 100, 400]);
-    const freqs = [261, 329, 392, 523, 659];
-    freqs.forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'square', 0.4, 0.08), i * 150);
-    });
-  }
-
   playLoss() {
-    this.vibrate(500);
-    const freqs = [523, 392, 329, 261];
-    freqs.forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'sawtooth', 0.4, 0.08), i * 150);
+    this.vibrate(800);
+    [400, 300, 200, 100].forEach((f, i) => {
+      setTimeout(() => this.playTone(f, 'sawtooth', 0.5, 0.1), i * 150);
     });
   }
 }

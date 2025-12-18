@@ -1,459 +1,330 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Blade, Particle, Point, ArenaStyle, BattleStats, AIDifficulty, ReplayFrame, BladeArchetype, BitbeastType } from '../types';
+import { Blade, Particle, ArenaStyle, BattleStats, AIDifficulty, BeyName } from '../types';
 import { updatePhysics, resolveCollision, resolveArenaBoundary } from '../engine/physics';
 import { sounds } from '../utils/sounds';
-import { 
-  ARENA_RADIUS, 
-  BLADE_RADIUS, 
-  DAMAGE_FACTOR, 
-  ENERGY_GAIN,
-  ARENA_THEMES,
-  ARCHETYPE_STATS,
-  BITBEAST_INFO
-} from '../constants';
+import { ARENA_RADIUS, BLADE_RADIUS, BEY_DATA, ARENA_THEMES } from '../constants';
 
 interface ArenaProps {
-  playerConfig: {
-    color: string;
-    glowColor: string;
-    stylePattern: 'DRAGON' | 'PHOENIX' | 'TIGER' | 'TURTLE';
-    arenaStyle: ArenaStyle;
-    archetype: BladeArchetype;
-    bitbeast: BitbeastType;
-  };
+  playerBey: BeyName;
+  rivalBey: BeyName;
   difficulty: AIDifficulty;
+  arenaStyle: ArenaStyle;
   joystickVector: { x: number, y: number };
-  onGameOver: (winner: string, stats: { player: BattleStats, rival: BattleStats }) => void;
+  onGameOver: (winner: string, stats: BattleStats) => void;
   onUpdateStats: (player: Blade, rival: Blade) => void;
-  mobileSpecialTrigger?: boolean;
+  specialTriggered: boolean;
 }
 
-const TRAIL_LENGTH = 20;
-
-const Arena: React.FC<ArenaProps> = ({ playerConfig, difficulty, joystickVector, onGameOver, onUpdateStats, mobileSpecialTrigger }) => {
+const Arena: React.FC<ArenaProps> = ({ playerBey, rivalBey, difficulty, arenaStyle, joystickVector, onGameOver, onUpdateStats, specialTriggered }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(0);
-  const particlesRef = useRef<Particle[]>([]);
   const [isLaunched, setIsLaunched] = useState(false);
-  const keysPressed = useRef<Set<string>>(new Set());
-  const specialActiveRef = useRef<number>(0); 
-  const rivalSpecialActiveRef = useRef<number>(0);
-  const shakeRef = useRef<number>(0);
-  const frameRef = useRef<number>(0);
-
-  const [summonText, setSummonText] = useState<string | null>(null);
-
-  const playerTrailRef = useRef<{x: number, y: number, alpha: number}[]>([]);
-  const rivalTrailRef = useRef<{x: number, y: number, alpha: number}[]>([]);
-  const replayFramesRef = useRef<ReplayFrame[]>([]);
+  const [battleOver, setBattleOver] = useState(false);
+  const particlesRef = useRef<Particle[]>([]);
+  const frameRef = useRef(0);
+  const requestRef = useRef<number>(0);
+  const launchTimeRef = useRef(0);
   
+  // Keyboard State for Control
+  const keysRef = useRef<Record<string, boolean>>({});
+
+  const pData = BEY_DATA[playerBey] || BEY_DATA['Z_ACHILLES'];
+  const rData = BEY_DATA[rivalBey] || BEY_DATA['EMPEROR_FORNEUS'];
+
   const playerRef = useRef<Blade>({
-    id: 'player',
-    name: 'KENJI',
-    x: 0,
-    y: 150,
-    vx: 0,
-    vy: 0,
-    radius: BLADE_RADIUS,
-    rotation: 0,
-    rotationSpeed: 0,
-    health: 100,
-    maxHealth: 100,
-    energy: 0,
-    maxEnergy: 100,
-    color: playerConfig.color,
-    glowColor: playerConfig.glowColor,
-    archetype: playerConfig.archetype,
-    bitbeast: playerConfig.bitbeast,
-    isPlayer: true
+    id: 'player', name: 'Aiger', type: playerBey,
+    x: 0, y: 180, vx: 0, vy: 0, radius: BLADE_RADIUS,
+    rotation: 0, rotationSpeed: 0, health: 100, maxHealth: 100,
+    energy: 0, maxEnergy: 100, color: pData.color, glowColor: pData.glow,
+    isPlayer: true, isTurbo: false, stats: pData.stats
   });
 
   const rivalRef = useRef<Blade>({
-    id: 'rival',
-    name: 'VEX',
-    x: 0,
-    y: -150,
-    vx: 0,
-    vy: 0,
-    radius: BLADE_RADIUS,
-    rotation: 0,
-    rotationSpeed: 0,
-    health: 100,
-    maxHealth: 100,
-    energy: 0,
-    maxEnergy: 100,
-    color: '#ef4444',
-    glowColor: '#f87171',
-    archetype: difficulty === 'ZENON' ? 'STRIKER' : 'GUARDIAN',
-    bitbeast: 'DRIGER',
-    isPlayer: false
+    id: 'rival', name: 'Rival', type: rivalBey,
+    x: 0, y: -180, vx: 0, vy: 0, radius: BLADE_RADIUS,
+    rotation: 0, rotationSpeed: 0, health: 100, maxHealth: 100,
+    energy: 0, maxEnergy: 100, color: rData.color, glowColor: rData.glow,
+    isPlayer: false, isTurbo: false, stats: rData.stats
   });
 
-  const statsRef = useRef({
-    player: { damageDealt: 0, damageTaken: 0, collisions: 0, specialsUsed: 0, maxSpeed: 0 },
-    rival: { damageDealt: 0, damageTaken: 0, collisions: 0, specialsUsed: 0, maxSpeed: 0 }
-  });
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => { keysRef.current[e.key.toLowerCase()] = true; };
+    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key.toLowerCase()] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
-  const launchBlade = (e?: any) => {
-    if (isLaunched) return;
-    sounds.playLaunch();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    let mouseX = 0, mouseY = 0;
-    
-    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-    
-    if (clientX !== undefined) {
-      mouseX = clientX - rect.left - canvas.width / 2;
-      mouseY = clientY - rect.top - canvas.height / 2;
-    } else {
-      mouseX = (Math.random() - 0.5) * 200;
-      mouseY = (Math.random() - 0.5) * 200;
-    }
-    
-    const speed = 20;
-    const angle = Math.atan2(mouseY - playerRef.current.y, mouseX - playerRef.current.x);
-    playerRef.current.vx = Math.cos(angle) * speed;
-    playerRef.current.vy = Math.sin(angle) * speed;
-    
-    const aiSpeed = difficulty === 'ROOKIE' ? 12 : 18;
-    rivalRef.current.vx = (Math.random() - 0.5) * aiSpeed;
-    rivalRef.current.vy = (Math.random() - 0.5) * aiSpeed;
-    setIsLaunched(true);
-  };
-
-  const triggerSpecial = (isPlayer: boolean) => {
-    const blade = isPlayer ? playerRef.current : rivalRef.current;
-    const target = isPlayer ? rivalRef.current : playerRef.current;
-    const activeRef = isPlayer ? specialActiveRef : rivalSpecialActiveRef;
-
-    if (blade.energy >= 100) {
-      sounds.playSpecial();
-      blade.energy = 0;
-      activeRef.current = Date.now() + 3000; 
-      shakeRef.current = 40;
-      
-      const beastInfo = BITBEAST_INFO[blade.bitbeast];
-      if (isPlayer) {
-        setSummonText(`${beastInfo.name}: ${beastInfo.move}!`);
-        setTimeout(() => setSummonText(null), 2500);
-        statsRef.current.player.specialsUsed++;
-      } else {
-        statsRef.current.rival.specialsUsed++;
-      }
-      
-      // Homing Rush
-      const dx = target.x - blade.x;
-      const dy = target.y - blade.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      blade.vx += (dx / (dist || 1)) * 50;
-      blade.vy += (dy / (dist || 1)) * 50;
-      
-      // Special Visuals
-      createBeastSummon(blade.x, blade.y, beastInfo.color, beastInfo.symbol);
-      createImpactParticles(blade.x, blade.y, beastInfo.color, 150, 'STORM');
-      
-      // Unique Effects based on Bitbeast
-      if (beastInfo.effect === 'TORNADO') {
-         for(let i=0; i<30; i++) {
-            particlesRef.current.push({
-               x: blade.x, y: blade.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
-               life: 1.5, maxLife: 1.5, color: '#fff', size: 10, type: 'STORM'
-            });
-         }
-      } else if (beastInfo.effect === 'FLAME') {
-         for(let i=0; i<60; i++) {
-           createImpactParticles(blade.x, blade.y, '#ef4444', 1, 'EMBER');
-         }
-      }
-    }
-  };
-
-  const createBeastSummon = (x: number, y: number, color: string, symbol: string) => {
-    particlesRef.current.push({
-      x, y, vx: 0, vy: -0.5, life: 1, maxLife: 2, color, size: 60, type: 'BEAST', angle: 0, symbol
-    });
-  };
-
-  const createImpactParticles = (x: number, y: number, color: string, count: number, type: 'IMPACT' | 'SPARK' | 'EMBER' | 'FLASH' | 'STORM' = 'IMPACT', velocity?: {x: number, y: number}) => {
+  const createParticles = (x: number, y: number, color: string, count: number, type: any = 'SPARK') => {
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      let speed = Math.random() * 12 + 3;
-      let life = Math.random() * 0.7 + 0.3;
-      let size = Math.random() * 5 + 1;
-
-      if (type === 'SPARK') { speed *= 1.8; size = Math.random() * 2 + 1; }
-      if (type === 'STORM') { speed *= 2.5; size = Math.random() * 8 + 3; life *= 1.8; }
-
       particlesRef.current.push({
         x, y, 
-        vx: (Math.cos(angle) * speed) + (velocity ? velocity.x * 0.4 : 0), 
-        vy: (Math.sin(angle) * speed) + (velocity ? velocity.y * 0.4 : 0),
-        life: life, maxLife: life, color, size, type
+        vx: (Math.random() - 0.5) * 14, 
+        vy: (Math.random() - 0.5) * 14,
+        life: 1, maxLife: 1, color, size: Math.random() * 3 + 1, type
       });
     }
   };
 
-  const drawBlade = (ctx: CanvasRenderingContext2D, blade: Blade, specialActive: number) => {
-    const isSpecial = Date.now() < specialActive;
-    const stats = ARCHETYPE_STATS[blade.archetype];
-    const beast = BITBEAST_INFO[blade.bitbeast];
-    
+  const drawBeyblade = (ctx: CanvasRenderingContext2D, blade: Blade) => {
+    const { x, y, rotation, color, glowColor, type, isTurbo } = blade;
+    const data = BEY_DATA[type];
     ctx.save();
-    ctx.translate(blade.x, blade.y);
+    ctx.translate(x, y);
+    
+    // Shadow for depth
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowOffsetY = 10;
 
-    // Dynamic Trail Particles
-    if (frameRef.current % 3 === 0) {
-      particlesRef.current.push({
-        x: blade.x + (Math.random()-0.5)*10,
-        y: blade.y + (Math.random()-0.5)*10,
-        vx: -blade.vx * 0.1, vy: -blade.vy * 0.1,
-        life: 0.5, maxLife: 0.5, color: blade.glowColor, size: 4, type: 'TRAIL'
-      });
+    // Turbo Glow Effect
+    if (isTurbo) {
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = '#fbbf24';
+        if (frameRef.current % 4 === 0) {
+            createParticles(blade.x, blade.y, '#fcd34d', 1, 'TURBO');
+        }
     }
 
-    ctx.rotate(blade.rotation);
-    
-    // LAYER 1: BASE PLATE (Depth simulation)
-    ctx.beginPath();
-    ctx.arc(0, 0, blade.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#0f172a';
-    ctx.fill();
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.rotate(rotation);
 
-    // LAYER 2: METAL WEIGHT DISK (Gradients for metallic look)
+    // 1. Metal Forge Disc
     ctx.beginPath();
-    const diskSides = 8;
-    for(let i=0; i<diskSides; i++){
-        const a = i * (Math.PI*2/diskSides);
-        const r = blade.radius * 0.88;
-        const px = r * Math.cos(a);
-        const py = r * Math.sin(a);
-        if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    for (let i = 0; i < 12; i++) {
+        const angle = (i * 2 * Math.PI) / 12;
+        const r = blade.radius * (i % 2 === 0 ? 0.98 : 0.85);
+        ctx.lineTo(r * Math.cos(angle), r * Math.sin(angle));
     }
     ctx.closePath();
-    const metalGrad = ctx.createLinearGradient(-blade.radius, -blade.radius, blade.radius, blade.radius);
-    metalGrad.addColorStop(0, '#94a3b8');
-    metalGrad.addColorStop(0.4, '#f1f5f9');
-    metalGrad.addColorStop(0.6, '#cbd5e1');
-    metalGrad.addColorStop(1, '#475569');
-    ctx.fillStyle = metalGrad;
+    const diskGrad = ctx.createLinearGradient(-30, -30, 30, 30);
+    diskGrad.addColorStop(0, '#94a3b8');
+    diskGrad.addColorStop(0.5, '#f8fafc');
+    diskGrad.addColorStop(1, '#475569');
+    ctx.fillStyle = diskGrad;
     ctx.fill();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // LAYER 3: ATTACK RING (Shape based on archetype)
-    const sides = stats.shapeSides;
+    // 2. Real Energy Layer Geometry
     ctx.beginPath();
-    if (sides === 0) {
-      ctx.arc(0, 0, blade.radius * 0.75, 0, Math.PI * 2);
-    } else {
-      for (let i = 0; i < sides * 2; i++) {
-        const angle = (i * Math.PI) / sides;
-        const r = (i % 2 === 0) ? blade.radius * 0.78 : blade.radius * 0.6;
-        const px = r * Math.cos(angle);
-        const py = r * Math.sin(angle);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
+    if (type === 'Z_ACHILLES') {
+        for(let j=0; j<2; j++) {
+            ctx.rotate(Math.PI);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(blade.radius, -18);
+            ctx.lineTo(blade.radius + 12, 0);
+            ctx.lineTo(blade.radius, 18);
+            ctx.fillStyle = data.secondary;
+            ctx.fill();
+            ctx.fillStyle = data.color;
+            ctx.fillRect(8, -6, blade.radius - 5, 12);
+        }
+    } else if (type === 'WINNING_VALKYRIE') {
+        for(let j=0; j<3; j++) {
+            ctx.rotate((2*Math.PI)/3);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.bezierCurveTo(blade.radius + 15, -30, blade.radius + 25, 30, 0, 0);
+            ctx.fillStyle = data.color;
+            ctx.fill();
+            ctx.strokeStyle = data.secondary;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        }
+    } else if (type === 'BLOODY_LONGINUS') {
+        for(let j=0; j<2; j++) {
+            ctx.rotate(Math.PI);
+            ctx.beginPath();
+            ctx.moveTo(-10, -10);
+            ctx.quadraticCurveTo(blade.radius + 10, -50, blade.radius + 5, 10);
+            ctx.fillStyle = data.color;
+            ctx.fill();
+            ctx.strokeStyle = data.secondary;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    } else if (type === 'EMPEROR_FORNEUS') {
+        ctx.beginPath();
+        for(let i=0; i<16; i++) {
+          ctx.rotate(Math.PI/8);
+          ctx.lineTo(blade.radius, 0);
+          ctx.lineTo(blade.radius-8, 8);
+        }
+        ctx.fillStyle = data.color;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, blade.radius * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = data.secondary;
+        ctx.fill();
+    } else if (type === 'DEAD_PHOENIX') {
+        ctx.beginPath();
+        ctx.arc(0, 0, blade.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = data.color;
+        ctx.lineWidth = 10;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, blade.radius * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = data.secondary;
+        ctx.fill();
     }
-    ctx.fillStyle = blade.color;
-    ctx.shadowBlur = isSpecial ? 40 : 15;
-    ctx.shadowColor = isSpecial ? '#fff' : blade.glowColor;
+
+    // 3. Central God Chip
+    ctx.rotate(-rotation);
+    ctx.beginPath();
+    ctx.arc(0, 0, blade.radius * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f172a';
     ctx.fill();
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // LAYER 4: CENTER SPIRIT CHIP
-    ctx.beginPath();
-    ctx.arc(0, 0, blade.radius * 0.32, 0, Math.PI * 2);
-    ctx.fillStyle = '#000';
-    ctx.fill();
-    ctx.strokeStyle = beast.color;
     ctx.lineWidth = 2;
     ctx.stroke();
-
-    ctx.save();
-    ctx.rotate(-blade.rotation); // Keep symbol upright
-    ctx.font = 'bold 16px Orbitron';
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Orbitron';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(beast.symbol, 0, 1);
-    ctx.restore();
-
-    // Special Burst Visuals (Ring)
-    if (isSpecial) {
-      ctx.beginPath();
-      ctx.arc(0, 0, blade.radius * 2.2, 0, Math.PI * 2);
-      const aura = ctx.createRadialGradient(0, 0, blade.radius, 0, 0, blade.radius * 2.5);
-      aura.addColorStop(0, `${beast.color}dd`);
-      aura.addColorStop(1, 'transparent');
-      ctx.fillStyle = aura;
-      ctx.fill();
-    }
+    ctx.fillText(data.symbol, 0, 0);
 
     ctx.restore();
+  };
+
+  const handleLaunch = () => {
+    if (isLaunched || battleOver) return;
+    sounds.playLaunch();
+    launchTimeRef.current = frameRef.current;
+    playerRef.current.vx = (joystickVector.x || 0) * 12;
+    playerRef.current.vy = -30;
+    rivalRef.current.vx = (Math.random() - 0.5) * 20;
+    rivalRef.current.vy = 30;
+    setIsLaunched(true);
   };
 
   const update = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || battleOver) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     frameRef.current++;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    if (shakeRef.current > 0) {
-      ctx.translate((Math.random() - 0.5) * shakeRef.current, (Math.random() - 0.5) * shakeRef.current);
-      shakeRef.current *= 0.94;
-    }
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    drawArena(ctx);
+    const theme = ARENA_THEMES[arenaStyle] || ARENA_THEMES.CLASSIC;
 
-    const p = playerRef.current;
-    const r = rivalRef.current;
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+
+    // Render Stadium
+    ctx.beginPath();
+    ctx.arc(0, 0, ARENA_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = theme.floor;
+    ctx.fill();
+    ctx.strokeStyle = theme.border;
+    ctx.lineWidth = 15;
+    ctx.stroke();
 
     if (isLaunched) {
-      playerTrailRef.current.push({x: p.x, y: p.y, alpha: 1.0});
-      if (playerTrailRef.current.length > TRAIL_LENGTH) playerTrailRef.current.shift();
-      rivalTrailRef.current.push({x: r.x, y: r.y, alpha: 1.0});
-      if (rivalTrailRef.current.length > TRAIL_LENGTH) rivalTrailRef.current.shift();
+      const p = playerRef.current;
+      const r = rivalRef.current;
+      const elapsed = frameRef.current - launchTimeRef.current;
 
-      // AI Decision Logic
-      const dist = Math.sqrt(Math.pow(p.x - r.x, 2) + Math.pow(p.y - r.y, 2));
-      let aiForce = difficulty === 'ZENON' ? 0.4 : 0.2;
-      const dx = (p.x + p.vx * 15) - r.x;
-      const dy = (p.y + p.vy * 15) - r.y;
-      const mag = Math.sqrt(dx*dx + dy*dy);
-      r.vx += (dx / (mag || 1)) * aiForce;
-      r.vy += (dy / (mag || 1)) * aiForce;
+      // AI Logic
+      const dx = p.x - r.x;
+      const dy = p.y - r.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      let aiForce = 0.5;
+      if (difficulty === 'GOD_TIER') aiForce = 1.1;
+      
+      r.vx += (dx / dist) * aiForce;
+      r.vy += (dy / dist) * aiForce;
 
-      if (r.energy >= 100 && dist < 250) triggerSpecial(false);
+      // Input Processing (Joystick + Keyboard)
+      let moveX = joystickVector.x;
+      let moveY = joystickVector.y;
 
-      // Player Controls
-      const steerForce = 0.4;
-      let dxIn = joystickVector.x;
-      let dyIn = joystickVector.y;
-      if (keysPressed.current.has('w')) dyIn -= 1;
-      if (keysPressed.current.has('s')) dyIn += 1;
-      if (keysPressed.current.has('a')) dxIn -= 1;
-      if (keysPressed.current.has('d')) dxIn += 1;
-      const inMag = Math.sqrt(dxIn*dxIn + dyIn*dyIn);
-      if (inMag > 0.1) {
-        p.vx += (dxIn / inMag) * steerForce;
-        p.vy += (dyIn / inMag) * steerForce;
-      }
-      if (keysPressed.current.has(' ') || mobileSpecialTrigger) triggerSpecial(true);
+      if (keysRef.current['w'] || keysRef.current['arrowup']) moveY = -1;
+      if (keysRef.current['s'] || keysRef.current['arrowdown']) moveY = 1;
+      if (keysRef.current['a'] || keysRef.current['arrowleft']) moveX = -1;
+      if (keysRef.current['d'] || keysRef.current['arrowright']) moveX = 1;
 
-      updatePhysics(p); updatePhysics(r);
-      resolveArenaBoundary(p, { x: 0, y: 0 }, playerConfig.arenaStyle);
-      resolveArenaBoundary(r, { x: 0, y: 0 }, playerConfig.arenaStyle);
+      const steerForce = 1.1; // Increased steer force for better control
+      p.vx += moveX * steerForce;
+      p.vy += moveY * steerForce;
 
-      if (resolveCollision(p, r)) {
-        const impact = Math.sqrt(Math.pow(p.vx-r.vx,2) + Math.pow(p.vy-r.vy,2));
-        sounds.playImpact(impact);
-        p.health -= impact * DAMAGE_FACTOR;
-        r.health -= impact * DAMAGE_FACTOR;
-        p.energy = Math.min(100, p.energy + impact * ENERGY_GAIN);
-        r.energy = Math.min(100, r.energy + impact * ENERGY_GAIN);
-        createImpactParticles((p.x+r.x)/2, (p.y+r.y)/2, '#fff', impact, 'SPARK');
+      if (specialTriggered && p.energy >= 100) {
+          sounds.playSpecial();
+          p.energy = 0;
+          p.vx += (dx / dist) * 60;
+          p.vy += (dy / dist) * 60;
+          createParticles(p.x, p.y, p.color, 60, 'STORM');
       }
 
-      if (p.health <= 0 || r.health <= 0) {
-        onGameOver(p.health > r.health ? 'KENJI' : 'VEX', { player: { ...statsRef.current.player }, rival: { ...statsRef.current.rival } });
+      updatePhysics(p);
+      updatePhysics(r);
+      resolveArenaBoundary(p, arenaStyle, elapsed);
+      resolveArenaBoundary(r, arenaStyle, elapsed);
+
+      const collision = resolveCollision(p, r);
+      if (collision.collided) {
+          const impact = Math.sqrt(Math.pow(p.vx - r.vx, 2) + Math.pow(p.vy - r.vy, 2));
+          sounds.playImpact(impact);
+          createParticles((p.x + r.x)/2, (p.y + r.y)/2, '#fff', Math.floor(impact * 2.5));
+          p.energy = Math.min(100, p.energy + impact * 1.0);
+          r.energy = Math.min(100, r.energy + impact * 1.0);
+          
+          if (collision.burst) {
+            setBattleOver(true);
+            sounds.playLoss();
+            onGameOver(p.health <= 0 ? 'Rival' : 'Aiger', { 
+                damageDealt: 100, damageTaken: 100, collisions: 30, specialsUsed: 1, maxSpeed: 45, isBurst: true 
+            });
+          }
       }
+
       onUpdateStats({...p}, {...r});
     }
 
-    // Particle Handling with bounds check
-    particlesRef.current.forEach(pt => {
-      pt.x += pt.vx; pt.y += pt.vy; pt.life -= 0.015;
-      const safeLife = Math.max(0, pt.life);
-      ctx.globalAlpha = safeLife;
-      if (pt.type === 'BEAST') {
-        ctx.font = `bold ${pt.size}px Orbitron`;
-        ctx.fillStyle = pt.color;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = pt.color;
-        ctx.fillText(pt.symbol || '?', pt.x, pt.y);
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.fillStyle = pt.color;
-        ctx.beginPath(); 
-        ctx.arc(pt.x, pt.y, Math.max(0, pt.size * safeLife), 0, Math.PI*2); 
+    particlesRef.current.forEach((p) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.025;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
-      }
     });
-    particlesRef.current = particlesRef.current.filter(pt => pt.life > 0);
+    particlesRef.current = particlesRef.current.filter(p => p.life > 0);
     ctx.globalAlpha = 1.0;
 
-    drawBlade(ctx, p, specialActiveRef.current);
-    drawBlade(ctx, r, rivalSpecialActiveRef.current);
-    ctx.restore();
-    requestRef.current = requestAnimationFrame(update);
-  }, [isLaunched, difficulty, joystickVector, playerConfig.arenaStyle, mobileSpecialTrigger]);
+    drawBeyblade(ctx, playerRef.current);
+    drawBeyblade(ctx, rivalRef.current);
 
-  const drawArena = (ctx: CanvasRenderingContext2D) => {
-    const theme = ARENA_THEMES[playerConfig.arenaStyle];
-    ctx.beginPath();
-    if (theme.sides === 0) ctx.arc(0, 0, ARENA_RADIUS, 0, Math.PI * 2);
-    else {
-      for (let i = 0; i < theme.sides; i++) {
-        const a = (i * Math.PI * 2) / theme.sides - Math.PI / theme.sides;
-        const px = ARENA_RADIUS * Math.cos(a);
-        const py = ARENA_RADIUS * Math.sin(a);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-    }
-    ctx.fillStyle = theme.floorColor; ctx.fill();
-    ctx.strokeStyle = theme.borderColor; ctx.lineWidth = 15; ctx.stroke();
-    
-    // Stadium Markings
-    ctx.beginPath();
-    ctx.arc(0, 0, ARENA_RADIUS * 0.4, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  };
+    ctx.restore();
+    requestRef.current = window.requestAnimationFrame(update);
+  }, [isLaunched, battleOver, joystickVector, arenaStyle, specialTriggered, onGameOver, onUpdateStats, difficulty]);
 
   useEffect(() => {
-    const handleDown = (e: KeyboardEvent) => keysPressed.current.add(e.key.toLowerCase());
-    const handleUp = (e: KeyboardEvent) => keysPressed.current.delete(e.key.toLowerCase());
-    window.addEventListener('keydown', handleDown); window.addEventListener('keyup', handleUp);
-    requestRef.current = requestAnimationFrame(update);
-    return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); cancelAnimationFrame(requestRef.current); };
+    requestRef.current = window.requestAnimationFrame(update);
+    return () => window.cancelAnimationFrame(requestRef.current);
   }, [update]);
 
   return (
-    <div className="relative overflow-hidden w-screen h-screen flex items-center justify-center bg-slate-950">
-      <div className="relative aspect-square max-h-screen p-4">
-        <canvas ref={canvasRef} width={800} height={800} onMouseDown={launchBlade} className="w-full h-full max-h-[85vh] cursor-crosshair rounded-full shadow-2xl" />
-      </div>
-      {summonText && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50">
-          <div className="bg-white/10 backdrop-blur-md px-12 py-6 rounded-3xl border border-white/20 animate-in zoom-in slide-in-from-bottom-8">
-            <h2 className="text-6xl font-black font-orbitron text-white italic tracking-tighter drop-shadow-[0_0_30px_#fff]">
-              {summonText}
-            </h2>
+    <div className="relative w-full h-full flex items-center justify-center">
+      <canvas 
+        ref={canvasRef} 
+        width={800} height={800} 
+        onClick={handleLaunch}
+        className="max-w-full max-h-full touch-none shadow-[0_0_150px_rgba(0,0,0,0.6)] rounded-full border-8 border-slate-900" 
+      />
+      {!isLaunched && !battleOver && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none rounded-full">
+              <div className="text-center animate-bounce">
+                <h2 className="text-7xl font-black font-orbitron text-white italic tracking-tighter drop-shadow-[0_0_25px_#fff]">3... 2... 1...</h2>
+                <p className="text-red-500 font-black text-2xl tracking-[1em] uppercase mt-4 drop-shadow-md">Go Shoot!</p>
+                <p className="text-slate-400 font-bold text-xs mt-6 tracking-widest">[ USE WASD OR JOYSTICK ]</p>
+              </div>
           </div>
-        </div>
-      )}
-      {!isLaunched && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xl pointer-events-none z-40">
-          <div className="text-center p-12 bg-slate-900/40 rounded-[60px] border border-blue-500/20 animate-in zoom-in shadow-2xl">
-            <h3 className="text-7xl font-black font-orbitron text-blue-500 italic mb-6 animate-pulse tracking-tighter">BATTLE PHASE</h3>
-            <p className="text-white/80 font-black tracking-[0.6em] text-2xl uppercase italic">Tap to Release Blade</p>
-          </div>
-        </div>
       )}
     </div>
   );

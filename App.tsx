@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameStatus, Blade, ArenaStyle, BattleStats, AIDifficulty, BladeArchetype, BitbeastType } from './types';
+import { GameStatus, Blade, BattleStats, AIDifficulty, BeyName } from './types';
 import Arena from './components/Arena';
 import Menu from './components/Menu';
 import StoryScreen from './components/StoryScreen';
@@ -9,11 +9,13 @@ import ResultScreen from './components/ResultScreen';
 import UIOverlay from './components/UIOverlay';
 import TutorialScreen from './components/TutorialScreen';
 import { sounds } from './utils/sounds';
+import { STORY_CHAPTERS } from './constants';
 
-const STORAGE_KEY = 'zenon_tournament_config';
+const STORAGE_KEY = 'beyblade_turbo_save';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>('MENU');
+  const [chapterIndex, setChapterIndex] = useState(0);
   const [winnerId, setWinnerId] = useState<string | null>(null);
   const [playerStats, setPlayerStats] = useState({ health: 100, energy: 0 });
   const [rivalStats, setRivalStats] = useState({ health: 100, energy: 0 });
@@ -22,35 +24,14 @@ const App: React.FC = () => {
   const [difficulty, setDifficulty] = useState<AIDifficulty>('ACE');
   const [specialTriggered, setSpecialTriggered] = useState(false);
   
-  const [playerCustom, setPlayerCustom] = useState<{
-    color: string;
-    glowColor: string;
-    stylePattern: 'DRAGON' | 'PHOENIX' | 'TIGER' | 'TURTLE';
-    arenaStyle: ArenaStyle;
-    archetype: BladeArchetype;
-    bitbeast: BitbeastType;
-  }>(() => {
+  const [playerBey, setPlayerBey] = useState<BeyName>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to load config", e);
-      }
-    }
-    return {
-      color: '#3b82f6',
-      glowColor: '#60a5fa',
-      stylePattern: 'DRAGON',
-      arenaStyle: 'CLASSIC',
-      archetype: 'PHANTOM',
-      bitbeast: 'DRAGOON'
-    };
+    return saved ? (JSON.parse(saved).playerBey as BeyName) : 'Z_ACHILLES';
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(playerCustom));
-  }, [playerCustom]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ playerBey, chapterIndex }));
+  }, [playerBey, chapterIndex]);
 
   useEffect(() => {
     const handleFirstClick = () => {
@@ -62,10 +43,17 @@ const App: React.FC = () => {
   }, []);
 
   const startGame = () => setStatus('STORY');
-  const startTutorial = () => setStatus('TUTORIAL');
-  const goToCustomize = () => setStatus('CUSTOMIZE');
   const startBattle = () => setStatus('BATTLE');
-  
+  const nextChapter = () => {
+    if (chapterIndex < STORY_CHAPTERS.length - 1) {
+      setChapterIndex(prev => prev + 1);
+      setStatus('STORY');
+    } else {
+      setStatus('MENU');
+      setChapterIndex(0);
+    }
+  };
+
   const resetToMenu = useCallback(() => {
     setStatus('MENU');
     setWinnerId(null);
@@ -75,16 +63,19 @@ const App: React.FC = () => {
     setSpecialTriggered(false);
   }, []);
 
-  const handleGameOver = (winner: string, stats: { player: BattleStats, rival: BattleStats }) => {
+  const handleGameOver = (winner: string, stats: BattleStats) => {
     setWinnerId(winner);
-    setBattleReport(stats);
+    // Construct a dummy report for the result screen
+    setBattleReport({
+        player: stats,
+        rival: { ...stats, damageDealt: 100 - stats.damageDealt } // Approximation
+    });
     setStatus('RESULT');
   };
 
   const handleUpdateStats = (player: Blade, rival: Blade) => {
     setPlayerStats({ health: player.health, energy: player.energy });
     setRivalStats({ health: rival.health, energy: rival.energy });
-    // Reset mobile special trigger if energy is depleted
     if (player.energy < 100 && specialTriggered) {
       setSpecialTriggered(false);
     }
@@ -92,17 +83,22 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen bg-slate-950 overflow-hidden flex items-center justify-center">
-      {status === 'MENU' && <Menu onStart={startGame} onTutorial={startTutorial} />}
+      {status === 'MENU' && <Menu onStart={startGame} onTutorial={() => setStatus('TUTORIAL')} />}
       
-      {status === 'STORY' && <StoryScreen onComplete={startTutorial} />}
+      {status === 'STORY' && (
+        <StoryScreen 
+          chapterIndex={chapterIndex} 
+          onComplete={() => setStatus('CUSTOMIZE')} 
+        />
+      )}
 
-      {status === 'TUTORIAL' && <TutorialScreen onComplete={goToCustomize} />}
+      {status === 'TUTORIAL' && <TutorialScreen onComplete={() => setStatus('MENU')} />}
 
       {status === 'CUSTOMIZE' && (
         <CustomizeScreen 
-          config={playerCustom}
+          currentBey={playerBey}
           difficulty={difficulty}
-          onChange={(cfg) => setPlayerCustom(prev => ({...prev, ...cfg}))}
+          onBeyChange={setPlayerBey}
           onDifficultyChange={setDifficulty}
           onConfirm={startBattle}
         />
@@ -111,12 +107,14 @@ const App: React.FC = () => {
       {status === 'BATTLE' && (
         <>
           <Arena 
-            playerConfig={playerCustom}
+            playerBey={playerBey}
+            rivalBey={STORY_CHAPTERS[chapterIndex].rivalBey}
             difficulty={difficulty}
+            arenaStyle={STORY_CHAPTERS[chapterIndex].arena}
             joystickVector={joystickVector}
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
-            mobileSpecialTrigger={specialTriggered}
+            specialTriggered={specialTriggered}
           />
           <UIOverlay 
             player={playerStats}
@@ -131,7 +129,7 @@ const App: React.FC = () => {
         <ResultScreen 
           winner={winnerId}
           report={battleReport}
-          onRestart={resetToMenu}
+          onRestart={winnerId === 'Aiger' ? nextChapter : resetToMenu}
           onHome={resetToMenu}
         />
       )}

@@ -26,7 +26,8 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ winner, report, onRestart, 
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayFrameIndex, setReplayFrameIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isPlayerWin = winner === 'KENJI';
+  // Fixed winner identification to match App.tsx and Arena.tsx names
+  const isPlayerWin = winner === 'Aiger';
 
   useEffect(() => {
     if (!isReplaying || !report?.player?.replayData || report.player.replayData.length === 0) {
@@ -129,9 +130,10 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ winner, report, onRestart, 
         {report && (
           <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-xl backdrop-blur-sm">
             <div className="grid grid-cols-3 gap-4 mb-6 border-b border-slate-700 pb-4">
-              <div className="text-left font-orbitron text-xs text-blue-300 uppercase italic">KENJI</div>
+              {/* Corrected player and rival labels */}
+              <div className="text-left font-orbitron text-xs text-blue-300 uppercase italic">AIGER</div>
               <div className="text-center font-orbitron text-xs text-slate-500 uppercase tracking-widest">BATTLE REPORT</div>
-              <div className="text-right font-orbitron text-xs text-red-400 uppercase italic">LORD VEX</div>
+              <div className="text-right font-orbitron text-xs text-red-400 uppercase italic">RIVAL</div>
             </div>
             <div className="space-y-1">
               <StatRow label="Damage Dealt" playerVal={Math.floor(report.player.damageDealt)} rivalVal={Math.floor(report.rival.damageDealt)} icon={Swords} color="text-orange-500" />
