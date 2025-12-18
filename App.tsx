@@ -1,116 +1,96 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { GameStatus, Blade, BattleStats, AIDifficulty, BeyName } from './types';
-import Arena from './components/Arena';
+import React, { useState, useCallback, useEffect } from 'react';
+import { AppState, BeyName, AIDifficulty, ArenaStyle, BattleStats, Blade } from './types';
 import Menu from './components/Menu';
-import StoryScreen from './components/StoryScreen';
 import CustomizeScreen from './components/CustomizeScreen';
-import ResultScreen from './components/ResultScreen';
-import UIOverlay from './components/UIOverlay';
+import StoryScreen from './components/StoryScreen';
 import TutorialScreen from './components/TutorialScreen';
+import Arena from './components/Arena';
+import UIOverlay from './components/UIOverlay';
+import ResultScreen from './components/ResultScreen';
 import { sounds } from './utils/sounds';
 import { STORY_CHAPTERS } from './constants';
 
-const STORAGE_KEY = 'beyblade_turbo_save';
-
 const App: React.FC = () => {
-  const [status, setStatus] = useState<GameStatus>('MENU');
+  const [state, setState] = useState<AppState>('IDLE');
+  const [playerBey, setPlayerBey] = useState<BeyName>('Z_ACHILLES');
+  const [rivalBey, setRivalBey] = useState<BeyName>('EMPEROR_FORNEUS');
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('ACE');
+  const [arenaStyle, setArenaStyle] = useState<ArenaStyle>('CLASSIC');
   const [chapterIndex, setChapterIndex] = useState(0);
-  const [winnerId, setWinnerId] = useState<string | null>(null);
+  
   const [playerStats, setPlayerStats] = useState({ health: 100, energy: 0 });
   const [rivalStats, setRivalStats] = useState({ health: 100, energy: 0 });
+  const [winner, setWinner] = useState<string | null>(null);
   const [battleReport, setBattleReport] = useState<{ player: BattleStats, rival: BattleStats } | null>(null);
   const [joystickVector, setJoystickVector] = useState({ x: 0, y: 0 });
-  const [difficulty, setDifficulty] = useState<AIDifficulty>('ACE');
   const [specialTriggered, setSpecialTriggered] = useState(false);
-  
-  const [playerBey, setPlayerBey] = useState<BeyName>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved).playerBey as BeyName) : 'Z_ACHILLES';
-  });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ playerBey, chapterIndex }));
-  }, [playerBey, chapterIndex]);
-
-  useEffect(() => {
-    const handleFirstClick = () => {
+    if (state === 'BATTLE') {
       sounds.startBGM();
-      window.removeEventListener('click', handleFirstClick);
-    };
-    window.addEventListener('click', handleFirstClick);
-    return () => window.removeEventListener('click', handleFirstClick);
-  }, []);
-
-  const startGame = () => setStatus('STORY');
-  const startBattle = () => setStatus('BATTLE');
-  const nextChapter = () => {
-    if (chapterIndex < STORY_CHAPTERS.length - 1) {
-      setChapterIndex(prev => prev + 1);
-      setStatus('STORY');
     } else {
-      setStatus('MENU');
-      setChapterIndex(0);
+      sounds.stopBGM();
     }
+  }, [state]);
+
+  const startTournament = () => {
+    setChapterIndex(0);
+    setState('STORY');
   };
 
-  const resetToMenu = useCallback(() => {
-    setStatus('MENU');
-    setWinnerId(null);
-    setBattleReport(null);
-    setPlayerStats({ health: 100, energy: 0 });
-    setRivalStats({ health: 100, energy: 0 });
-    setSpecialTriggered(false);
-  }, []);
+  const handleStoryComplete = () => {
+    const chapter = STORY_CHAPTERS[chapterIndex];
+    setRivalBey(chapter.rivalBey as BeyName);
+    setArenaStyle(chapter.arena as ArenaStyle || 'CLASSIC');
+    setState('BATTLE');
+  };
 
-  const handleGameOver = (winner: string, stats: BattleStats) => {
-    setWinnerId(winner);
-    // Construct a dummy report for the result screen
+  const handleGameOver = (winningName: string, stats: BattleStats) => {
+    setWinner(winningName);
+    // Simple mock report for now based on winner
     setBattleReport({
-        player: stats,
-        rival: { ...stats, damageDealt: 100 - stats.damageDealt } // Approximation
+      player: stats,
+      rival: { ...stats, damageDealt: stats.damageTaken, damageTaken: stats.damageDealt }
     });
-    setStatus('RESULT');
+    setState('RESULT');
   };
 
-  const handleUpdateStats = (player: Blade, rival: Blade) => {
-    setPlayerStats({ health: player.health, energy: player.energy });
-    setRivalStats({ health: rival.health, energy: rival.energy });
-    if (player.energy < 100 && specialTriggered) {
-      setSpecialTriggered(false);
-    }
-  };
+  const handleUpdateStats = useCallback((p: Blade, r: Blade) => {
+    setPlayerStats({ health: p.health, energy: p.energy });
+    setRivalStats({ health: r.health, energy: r.energy });
+  }, []);
 
   return (
-    <div className="relative w-screen h-screen bg-slate-950 overflow-hidden flex items-center justify-center">
-      {status === 'MENU' && <Menu onStart={startGame} onTutorial={() => setStatus('TUTORIAL')} />}
+    <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden font-press-start">
+      {state === 'IDLE' && <Menu onStart={startTournament} onTutorial={() => setState('TUTORIAL')} />}
       
-      {status === 'STORY' && (
+      {state === 'TUTORIAL' && <TutorialScreen onComplete={() => setState('IDLE')} />}
+      
+      {state === 'STORY' && (
         <StoryScreen 
           chapterIndex={chapterIndex} 
-          onComplete={() => setStatus('CUSTOMIZE')} 
+          onComplete={handleStoryComplete} 
         />
       )}
-
-      {status === 'TUTORIAL' && <TutorialScreen onComplete={() => setStatus('MENU')} />}
-
-      {status === 'CUSTOMIZE' && (
+      
+      {state === 'CUSTOMIZE' && (
         <CustomizeScreen 
           currentBey={playerBey}
           difficulty={difficulty}
           onBeyChange={setPlayerBey}
           onDifficultyChange={setDifficulty}
-          onConfirm={startBattle}
+          onConfirm={() => setState('STORY')}
         />
       )}
-
-      {status === 'BATTLE' && (
+      
+      {state === 'BATTLE' && (
         <>
           <Arena 
             playerBey={playerBey}
-            rivalBey={STORY_CHAPTERS[chapterIndex].rivalBey}
+            rivalBey={rivalBey}
             difficulty={difficulty}
-            arenaStyle={STORY_CHAPTERS[chapterIndex].arena}
+            arenaStyle={arenaStyle}
             joystickVector={joystickVector}
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
@@ -122,17 +102,25 @@ const App: React.FC = () => {
             onJoystickMove={setJoystickVector}
             onSpecialPress={() => setSpecialTriggered(true)}
           />
+          {/* Reset special trigger after frame */}
+          {specialTriggered && <div className="hidden">{setTimeout(() => setSpecialTriggered(false), 50)}</div>}
         </>
       )}
-
-      {status === 'RESULT' && (
+      
+      {state === 'RESULT' && (
         <ResultScreen 
-          winner={winnerId}
+          winner={winner}
           report={battleReport}
-          onRestart={winnerId === 'Aiger' ? nextChapter : resetToMenu}
-          onHome={resetToMenu}
+          onRestart={() => setState('BATTLE')}
+          onHome={() => setState('IDLE')}
         />
       )}
+
+      {/* Retro HUD Decoration */}
+      <div className="absolute top-4 left-4 pointer-events-none opacity-20">
+         <div className="text-[10px] text-blue-500">SYSTEM: V-BIOS 1.0.0</div>
+         <div className="text-[10px] text-blue-500">LINK: TURBO_CHIP_ACTIVE</div>
+      </div>
     </div>
   );
 };

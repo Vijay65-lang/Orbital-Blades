@@ -32,11 +32,21 @@ export const resolveCollision = (b1: Blade, b2: Blade): { collided: boolean, bur
     b2.vx += (impulseX / m2);
     b2.vy += (impulseY / m2);
 
+    // SPIN TRANSFER: Angular momentum transfer on impact
+    // Blades with higher rotation speed impart some of their spin energy to the other
+    const rotationDiff = b1.rotationSpeed - b2.rotationSpeed;
+    const transferFactor = 0.05; 
+    b1.rotationSpeed -= rotationDiff * transferFactor;
+    b2.rotationSpeed += rotationDiff * transferFactor;
+
     const impactForce = Math.abs(impulse);
     let burstOccurred = false;
     
-    const b1Damage = impactForce * (1.8 / b1.stats.burstResistance);
-    const b2Damage = impactForce * (1.8 / b2.stats.burstResistance);
+    // REDUCED DAMAGE MULTIPLIER: Prevents fast health drain
+    // Increased importance of burstResistance stat
+    const damageMultiplier = 0.35; 
+    const b1Damage = (impactForce * damageMultiplier) / (b1.stats.burstResistance * 0.5);
+    const b2Damage = (impactForce * damageMultiplier) / (b2.stats.burstResistance * 0.5);
 
     b1.health -= b1Damage;
     b2.health -= b2Damage;
@@ -62,7 +72,8 @@ export const updatePhysics = (blade: Blade) => {
   blade.y += blade.vy;
   
   const speed = Math.sqrt(blade.vx * blade.vx + blade.vy * blade.vy);
-  blade.rotationSpeed = 0.15 + (speed * 0.12);
+  // Cap rotation speed decay less aggressively
+  blade.rotationSpeed = Math.max(0.05, blade.rotationSpeed * 0.998) + (speed * 0.02);
   blade.rotation += blade.rotationSpeed;
 
   if (blade.health < 40 && !blade.isTurbo) {
@@ -83,9 +94,9 @@ export const resolveArenaBoundary = (blade: Blade, style: ArenaStyle, framesElap
             blade.vx -= 2 * dot * nx * WALL_BOUNCE;
             blade.vy -= 2 * dot * ny * WALL_BOUNCE;
             
-            // Only apply wall damage after the launch phase (1 second) to prevent instant bursting
+            // MINIMAL WALL DAMAGE: Prevents accidental suicide by touching rails
             if (framesElapsed > 60) {
-              blade.health -= 0.08; 
+              blade.health -= 0.005; 
             }
         }
         const overlap = dist + blade.radius - ARENA_RADIUS;

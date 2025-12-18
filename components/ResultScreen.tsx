@@ -26,8 +26,9 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ winner, report, onRestart, 
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayFrameIndex, setReplayFrameIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Fixed winner identification to match App.tsx and Arena.tsx names
-  const isPlayerWin = winner === 'Aiger';
+  
+  // Fix: Casing adjustment to match 'AIGER' as sent from Arena.tsx
+  const isPlayerWin = winner === 'AIGER';
 
   useEffect(() => {
     if (!isReplaying || !report?.player?.replayData || report.player.replayData.length === 0) {
@@ -130,7 +131,6 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ winner, report, onRestart, 
         {report && (
           <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-xl backdrop-blur-sm">
             <div className="grid grid-cols-3 gap-4 mb-6 border-b border-slate-700 pb-4">
-              {/* Corrected player and rival labels */}
               <div className="text-left font-orbitron text-xs text-blue-300 uppercase italic">AIGER</div>
               <div className="text-center font-orbitron text-xs text-slate-500 uppercase tracking-widest">BATTLE REPORT</div>
               <div className="text-right font-orbitron text-xs text-red-400 uppercase italic">RIVAL</div>

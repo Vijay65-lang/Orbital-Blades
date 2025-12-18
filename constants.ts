@@ -31,7 +31,7 @@ export const BEY_DATA: Record<BeyName, { stats: BeyStats, color: string, glow: s
   }
 };
 
-export const STORY_CHAPTERS: StoryChapter[] = [
+export const STORY_CHAPTERS: any[] = [
   { 
     id: 1, 
     title: "THE ZENON OPEN", 
@@ -50,40 +50,16 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     rivalName: "LUI SHIROSAGI", 
     rivalBey: "BLOODY_LONGINUS",
     dialogue: [
-      { speaker: "LUI", text: "A Turbo Bey? It's just a toy compared to Longinus!", side: "right", portrait: "🧊" },
+      { speaker: "LUI", text: "A Turbo Bey? It's just a toy compared to Longinus!", side: "right", portrait: "🐉" },
       { speaker: "AIGER", text: "I'll show you the power of Turbo Awakening!", side: "left", portrait: "👦" },
-      { speaker: "LUI", text: "Show me your despair! GO SHOOT!", side: "right", portrait: "🧊" }
+      { speaker: "LUI", text: "Show me your despair! GO SHOOT!", side: "right", portrait: "🐉" }
     ],
-    arena: 'CYBER_HEX'
-  },
-  { 
-    id: 3, 
-    title: "THE LEGENDARY CLASH", 
-    rivalName: "VALT AOI", 
-    rivalBey: "WINNING_VALKYRIE",
-    dialogue: [
-      { speaker: "VALT", text: "Whoa Aiger! Your resonance is burning up the stadium!", side: "right", portrait: "⚡" },
-      { speaker: "AIGER", text: "Valt! I'm finally ready to take that belt!", side: "left", portrait: "👦" },
-      { speaker: "VALT", text: "Then don't hold back! Valkyrie, RUSH SHOOT!", side: "right", portrait: "⚡" }
-    ],
-    arena: 'CLASSIC'
-  },
-  { 
-    id: 4, 
-    title: "FINAL: LORD VEX", 
-    rivalName: "LORD VEX", 
-    rivalBey: "DEAD_PHOENIX",
-    dialogue: [
-      { speaker: "LORD VEX", text: "I am the end of all bladers. Dead Phoenix will consume your spirit.", side: "right", portrait: "💀" },
-      { speaker: "AIGER", text: "I won't let you destroy Beyblade! Achilles, SUPER Z-BUSTER!!", side: "left", portrait: "👦" },
-      { speaker: "LORD VEX", text: "Eternal darkness awaits you. Witness true destruction!", side: "right", portrait: "💀" }
-    ],
-    arena: 'MAGMA_OCTA'
+    arena: 'STORM'
   }
 ];
 
-export const ARENA_THEMES = {
-  CLASSIC: { name: 'ZENON STADIUM', floor: '#0f172a', border: '#475569', accent: '#3b82f6' },
-  CYBER_HEX: { name: 'VIRTUAL GRID', floor: '#020617', border: '#06b6d4', accent: '#22d3ee' },
-  MAGMA_OCTA: { name: 'HELL CORE', floor: '#1c0a0a', border: '#991b1b', accent: '#ef4444' }
+export const ARENA_THEMES: Record<string, { floor: string, border: string }> = {
+  CLASSIC: { floor: '#0f172a', border: '#334155' },
+  HAZARD: { floor: '#1a1c1e', border: '#f97316' },
+  STORM: { floor: '#0c4a6e', border: '#38bdf8' },
 };
