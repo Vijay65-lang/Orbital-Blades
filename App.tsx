@@ -10,6 +10,8 @@ import UIOverlay from './components/UIOverlay';
 import TutorialScreen from './components/TutorialScreen';
 import { sounds } from './utils/sounds';
 
+const STORAGE_KEY = 'zenon_tournament_config';
+
 const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>('MENU');
   const [winnerId, setWinnerId] = useState<string | null>(null);
@@ -18,6 +20,7 @@ const App: React.FC = () => {
   const [battleReport, setBattleReport] = useState<{ player: BattleStats, rival: BattleStats } | null>(null);
   const [joystickVector, setJoystickVector] = useState({ x: 0, y: 0 });
   const [difficulty, setDifficulty] = useState<AIDifficulty>('ACE');
+  const [specialTriggered, setSpecialTriggered] = useState(false);
   
   const [playerCustom, setPlayerCustom] = useState<{
     color: string;
@@ -26,14 +29,28 @@ const App: React.FC = () => {
     arenaStyle: ArenaStyle;
     archetype: BladeArchetype;
     bitbeast: BitbeastType;
-  }>({
-    color: '#3b82f6',
-    glowColor: '#60a5fa',
-    stylePattern: 'DRAGON',
-    arenaStyle: 'CLASSIC',
-    archetype: 'PHANTOM',
-    bitbeast: 'DRAGOON'
+  }>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to load config", e);
+      }
+    }
+    return {
+      color: '#3b82f6',
+      glowColor: '#60a5fa',
+      stylePattern: 'DRAGON',
+      arenaStyle: 'CLASSIC',
+      archetype: 'PHANTOM',
+      bitbeast: 'DRAGOON'
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(playerCustom));
+  }, [playerCustom]);
 
   useEffect(() => {
     const handleFirstClick = () => {
@@ -55,6 +72,7 @@ const App: React.FC = () => {
     setBattleReport(null);
     setPlayerStats({ health: 100, energy: 0 });
     setRivalStats({ health: 100, energy: 0 });
+    setSpecialTriggered(false);
   }, []);
 
   const handleGameOver = (winner: string, stats: { player: BattleStats, rival: BattleStats }) => {
@@ -66,6 +84,10 @@ const App: React.FC = () => {
   const handleUpdateStats = (player: Blade, rival: Blade) => {
     setPlayerStats({ health: player.health, energy: player.energy });
     setRivalStats({ health: rival.health, energy: rival.energy });
+    // Reset mobile special trigger if energy is depleted
+    if (player.energy < 100 && specialTriggered) {
+      setSpecialTriggered(false);
+    }
   };
 
   return (
@@ -94,11 +116,13 @@ const App: React.FC = () => {
             joystickVector={joystickVector}
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
+            mobileSpecialTrigger={specialTriggered}
           />
           <UIOverlay 
             player={playerStats}
             rival={rivalStats}
             onJoystickMove={setJoystickVector}
+            onSpecialPress={() => setSpecialTriggered(true)}
           />
         </>
       )}
